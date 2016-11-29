@@ -28,7 +28,7 @@
 namespace matan {
   template <typename K, typename V>
   class BigMap {
-    //TODO: Use concepts to guarantee K implements operator< and Iter is ForwardIterable
+    //TODO: Use concepts to guarantee K implements operator< and Iter is ForwardIterable I think sorting requires RamdomAccessIterator
     //TODO: need to be able to remove elements
     /*
      * I selected timsort for this because it is optimized for partially
@@ -53,7 +53,7 @@ namespace matan {
     bool m_sorted = true;
     bool m_deepSorted = true;
 
-    template <typename IterK, typename IterV, bool enforceUnique>
+    template <bool enforceUnique, typename IterK, typename IterV>
     void zipAppend(const IterK& keys, const IterV& vals);
 
     template <bool enforceUnique>
@@ -125,10 +125,10 @@ namespace matan {
      * would (a) have the overhead of calling to the function repeatedly
      * and (b) would try to reset the bools every time.
      */
-    template <typename Iter, bool enforceUnique=true>
+    template <bool enforceUnique=true, typename Iter>
     void batchInsert(const Iter& pairs);
 
-    template <typename IterK, typename IterV, bool enforceUnique=true>
+    template <bool enforceUnique=true, typename IterK, typename IterV>
     void batchInsert(const IterK& keys, const IterV& vals);
 
     template<bool enforceUnique=true>
@@ -137,16 +137,16 @@ namespace matan {
     template<bool enforceUnique=true>
     void append(const std::pair<K, V>& kv) { append(kv.first, kv.second); };
 
-    template <typename Iter, bool enforceUnique=true>
+    template <bool enforceUnique=true, typename Iter>
     void batchAppend(const Iter& pairs);
 
-    template <typename IterK, typename IterV, bool enforceUnique=true>
+    template <bool enforceUnique=true, typename IterK, typename IterV>
     void batchAppend(const IterK& keys, const IterV& vals);
 
     bool hasKey(const K& key) const;
     bool hasVal(const V& val) const;
     void sort(); //sort m_keys
-    void deepSort(); //reorder m_vals according to m_keys. guarantees m_keys sorted.
+    void deepSort(); //reorder m_vals according to m_keys.
 
   };
 
@@ -252,7 +252,7 @@ namespace matan {
   }
 
   template <typename K, typename V>
-  template <typename Iter, bool enforceUnique>
+  template <bool enforceUnique, typename Iter>
   void BigMap<K, V>::batchInsert(const Iter& pairs) {
     for (const std::pair<K, V>& it : pairs) {
       rawAppend<enforceUnique>(it);
@@ -283,9 +283,9 @@ namespace matan {
   };
 
   template <typename K, typename V>
-  template <typename IterK, typename IterV, bool enforceUnique>
+  template <bool enforceUnique, typename IterK, typename IterV>
   void BigMap<K, V>::batchInsert(const IterK& keys, const IterV& vals) {
-    zipAppend<IterK, IterV, enforceUnique>(keys, vals);
+    zipAppend<enforceUnique>(keys, vals);
     if (!m_sorted)
       sort();
     m_deepSorted = false;
@@ -321,7 +321,7 @@ namespace matan {
   }
 
   template <typename K, typename V>
-  template <typename Iter, bool enforceUnique>
+  template <bool enforceUnique, typename Iter>
   void BigMap<K, V>::batchAppend(const Iter& pairs) {
     for (const std::pair<K, V>& it : pairs) {
       rawAppend<enforceUnique>(it);
@@ -330,9 +330,9 @@ namespace matan {
   }
 
   template <typename K, typename V>
-  template <typename IterK, typename IterV, bool enforceUnique>
+  template <bool enforceUnique, typename IterK, typename IterV>
   void BigMap<K, V>::batchAppend(const IterK& keys, const IterV& vals) {
-    zipAppend<IterK, IterV, enforceUnique>(keys, vals);
+    zipAppend<enforceUnique>(keys, vals);
     m_sorted = false;
     m_deepSorted = false;
   }
@@ -351,12 +351,12 @@ namespace matan {
     for (const auto& it : m_keys) {
       sortedVals.push_back(*it.second);
     }
-    m_vals = std::move(sortedVals); //should this be a move or just operator=?
+    m_vals = sortedVals; //should this be a move?
     m_deepSorted = true;
   }
 
   template <typename K, typename V>
-  template <typename IterK, typename IterV, bool enforceUnique>
+  template <bool enforceUnique, typename IterK, typename IterV>
   void BigMap<K, V>::zipAppend(const IterK& keys, const IterV& vals) {
     BOOST_FOREACH(const auto kv, boost::combine(keys, vals)) {
       if (enforceUnique && replace(boost::get<0>(kv), boost::get<1>(kv)))
