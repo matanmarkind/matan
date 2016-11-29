@@ -63,42 +63,5 @@ void bigMapTest(){
 
 int main() {
   bigMapTest();
-  /*
-  typedef std::pair<int, std::string&> KV;
-  std::vector<KV> keys;
-  keys.reserve(8);
-  std::vector<std::string> vals;
-  vals.reserve(8);
-  vals.push_back("a");
-  keys.push_back(KV(1, vals.back()));
-  vals.push_back("c");
-  keys.push_back(KV(3, vals.back()));
-  vals.push_back("d");
-  keys.push_back(KV(4, vals.back()));
-  vals.push_back("b");
-  keys.push_back(KV(2, vals.back()));
-  vals.push_back("e");
-  keys.push_back(KV(5, vals.back()));
-  vals.push_back("z");
-  keys.push_back(KV(26, vals.back()));
-  vals.push_back("f");
-  keys.push_back(KV(6, vals.back()));
-  vals.push_back("g");
-  keys.push_back(KV(7, vals.back()));
-  std::cout << std::endl;
-  for (auto s : keys) {
-    std::cout << "(" << s.first << "," << s.second << ") ";
-  }
-  std::cout << std::endl;
-  std::sort(keys.begin(),
-                 keys.end(),
-                 [](const KV& a, const KV& b) {
-                   return a.first < b.first;
-                 });
-  for (auto s : keys) {
-    std::cout << "(" << s.first << "," << s.second << ") ";
-  }
-  std::cout << std::endl;
-   */
   return EXIT_SUCCESS;
 }
