@@ -23,6 +23,7 @@
 #include <functional>
 #include <utility>
 #include <cmath>
+#include <initializer_list>
 
 #include <boost/foreach.hpp>
 #include <boost/range/combine.hpp>
@@ -54,19 +55,27 @@ namespace matan {
      * we might as well just be using a hashmap.
      *
      */
-
-  private:
+  public:
     typedef std::pair<K, V*> KV;
     typedef const std::pair<const K, const V*> ConstKV;
+    typedef typename std::vector<KV>::iterator iterator;
+    typedef typename std::vector<KV>::const_iterator const_iterator;
+    typedef typename std::vector<KV>::reverse_iterator reverse_iterator;
+    typedef typename std::vector<KV>::const_reverse_iterator const_reverse_iterator;
+
+  private:
     std::vector<KV> m_keys;
     std::vector<V> m_vals;
     bool m_sorted = true;
     bool m_deepSorted = true;
 
+    iterator rawFind(const K& key);
+
     template <typename IterK, typename IterV>
     void zipAppend(const IterK& keys, const IterV& vals);
 
-    void rawAppend(const K& key, const V& val);
+    template <bool noReplace=false>
+    void rawAppend(const K& key, const V& val); //The promise not to change the original is maintained, but I need a non const copy internally
 
     void rawAppend(const std::pair<const K, const V>& kv) {
       rawAppend(kv.first, kv.second);
@@ -92,15 +101,55 @@ namespace matan {
 
     ~BigMap() = default;
 
-    //TODO:perhaps I should construct a vector of references and have a  rawBegin that leaves the pointers in place for the user to handle
-    typename std::vector<KV>::iterator begin() { return m_keys.begin(); }
-    typename std::vector<KV>::const_iterator  begin() const  { return m_keys.begin(); }
-    typename std::vector<KV>::iterator  end()  { return m_keys.end(); }
-    typename std::vector<KV>::const_iterator  end() const  { return m_keys.end(); }
-    typename std::vector<KV>::reverse_iterator  rbegin()  { return m_keys.rbegin(); }
-    typename std::vector<KV>::const_reverse_iterator  rbegin() const  { return m_keys.rbegin(); }
-    typename std::vector<KV>::reverse_iterator rend()  { return m_keys.rend(); }
-    typename std::vector<KV>::const_reverse_iterator rend() const  { return m_keys.rend(); }
+    /*
+     * I could create my own iterator that rewraps the <K, V*> into <K, V&>,
+     * but that will slow things down since I need to hold the actual key
+     * iterator and then every time I increment rewrap into the new <K, V&>.
+     *
+     * I decided that if I wanted a high performance data structure that
+     * would be silly. Open to arguments...
+     * I also may just not be good at making iterators...
+     */
+    /*
+    struct iterator {
+          iterator(KVIt&& rawIt, KVIt&& end) :
+            it(rawIt->first, *(rawIt->second)), keyIt(rawIt), end(end) {}
+
+          std::pair<K, V&> operator*() { return it; };
+          const std::pair<K, V&>* operator->() const { return &it; };
+
+          iterator& operator++() { //prefix
+            ++keyIt;
+            if (keyIt == end)
+              return *this;
+            it.first = keyIt->first;
+            it.second = *(keyIt->second);
+            return *this;
+          }
+
+          iterator operator++(int) { //postfix
+            iterator temp = *this;
+            ++(*this);
+            return temp;
+          }
+
+          bool operator==(const iterator& other) const { return (keyIt == other.keyIt); };
+          bool operator!=(const iterator& other) const { return (keyIt != other.keyIt); };
+
+          std::pair<K, V&> it;
+          KVIt keyIt;
+          const KVIt end;
+        };
+        */
+
+    iterator begin() { return m_keys.begin(); }
+    const_iterator begin() const { return m_keys.begin(); }
+    iterator end() { return m_keys.end(); }
+    const_iterator end() const { return m_keys.end(); }
+    reverse_iterator rbegin() { return m_keys.rbegin(); }
+    const_reverse_iterator rbegin() const  { return m_keys.rbegin(); }
+    reverse_iterator rend() { return m_keys.rend(); }
+    const_reverse_iterator rend() const { return m_keys.rend(); }
 
     typename std::vector<V>::iterator deepBegin() {return m_vals.begin(); }
     typename std::vector<V>::const_iterator deepBegin() const  { return m_vals.begin(); }
@@ -114,8 +163,9 @@ namespace matan {
     size_t size() const { return m_keys.size(); }
     bool isSorted() const { return m_sorted; }
     bool isDeepSorted() const { return m_deepSorted; }
+    iterator find(const K& key) {return rawFind(key); };
+    const const_iterator find(const K& key) const { return rawFind(key); };
     V& operator[](const K& key);
-    const V& operator[] (const K& key) const;
     void reserve(const int n);
 
     void insert(const K& key, const V& val);
@@ -134,6 +184,8 @@ namespace matan {
     template <typename Iter>
     void batchInsert(const Iter& pairs);
 
+    void batchInsert(const std::initializer_list<std::pair<K, V>>&& pairs);
+
     template <typename IterK, typename IterV>
     void batchInsert(const IterK& keys, const IterV& vals);
 
@@ -144,6 +196,8 @@ namespace matan {
     template <typename Iter>
     void batchAppend(const Iter& pairs);
 
+    void batchAppend(const std::initializer_list<std::pair<K, V>>&& pairs);
+
     template <typename IterK, typename IterV>
     void batchAppend(const IterK& keys, const IterV& vals);
 
@@ -151,7 +205,6 @@ namespace matan {
     bool remove(const K& key);
     //TODO: If the user can pass in val, that will make things faster since won't have to search. overload
 
-    bool hasKey(const K& key) const;
     bool hasVal(const V& val) const;
     void sort(); //sort m_keys
     void deepSort(); //reorder m_vals according to m_keys.
@@ -182,51 +235,23 @@ namespace matan {
   }
 
   template <typename K, typename V, bool enforceSortedOnRemove>
-  bool BigMap<K, V, enforceSortedOnRemove>::hasKey(const K& key) const {
-    if (m_sorted)
-      return std::binary_search(m_keys.begin(),
-                                m_keys.end(),
-                                ConstKV(key, nullptr),
-                                keyComp);
-
-    for (const KV& kv : m_keys) {
-      if (unlikely(kv.first == key))
-        return true;
-    }
-    return false;
-  }
-
-  template <typename K, typename V, bool enforceSortedOnRemove>
   bool BigMap<K, V, enforceSortedOnRemove>::hasVal(const V& val) const {
     return std::find(m_vals.begin(), m_vals.end(), val) != m_vals.end();
   }
 
   template <typename K, typename V, bool enforceSortedOnRemove>
   V& BigMap<K, V, enforceSortedOnRemove>::operator[](const K& key) {
-    assert (hasKey(key));
-    if (m_sorted)
-      return *(*std::lower_bound(m_keys.begin(),
-                                 m_keys.end(),
-                                 key,
-                                 lowerKeyComp)).second;
-    for (KV& kv : m_keys) {
-      if (unlikely(kv.first==key))
-        return *(kv.second);
+    iterator it = rawFind(key);
+    if (it == end()) {
+      if (m_sorted) {
+        insert(key, V());
+        return *(rawFind(key)->second);
+      } else {
+        rawAppend<true>(key, V());
+        return m_vals.back();
+      }
     }
-  }
-
-  template <typename K, typename V, bool enforceSortedOnRemove>
-  const V& BigMap<K, V, enforceSortedOnRemove>::operator[](const K& key) const {
-    assert (hasKey(key));
-    if (m_sorted)
-      return *(*std::lower_bound(m_keys.begin(),
-                                 m_keys.end(),
-                                 key,
-                                 lowerKeyComp).second);
-    for (const KV& kv : m_keys) {
-      if (unlikely(kv.first==key))
-        return *kv.second;
-    }
+    return *(it->second);
   }
 
   template <typename K, typename V, bool enforceSortedOnRemove>
@@ -236,8 +261,7 @@ namespace matan {
   }
 
   template <typename K, typename V, bool enforceSortedOnRemove>
-  void BigMap<K, V, enforceSortedOnRemove>::insert(const K& key,
-                            const V& val) {
+  void BigMap<K, V, enforceSortedOnRemove>::insert(const K& key, const V& val) {
     if (replace(key, val)) {
       if (!m_sorted)
         sort();
@@ -271,25 +295,21 @@ namespace matan {
   }
 
   template <typename K, typename V, bool enforceSortedOnRemove>
-  bool BigMap<K, V, enforceSortedOnRemove>::replace(const K& key, const V& val) {
-    if (hasKey(key)) {
-      if (m_sorted) {
-        V& ele = *((*std::lower_bound(m_keys.begin(),
-                                                        m_keys.end(),
-                                                        key,
-                                                        lowerKeyComp)).second);
-        ele = val;
-      } else {
-        V& ele = *((*std::find_if(m_keys.begin(),
-                                                    m_keys.end(),
-                                                    [key](ConstKV kv) {
-                                                      return key == kv.first;
-                                                    })).second);
-        ele = val;
-      }
-      return true;
+  void BigMap<K, V, enforceSortedOnRemove>::batchInsert(const std::initializer_list<std::pair<K, V>>&& pairs) {
+    for (const std::pair<K, V>& it : pairs) {
+      rawAppend(it);
     }
-    return false;
+    sort();
+  }
+
+  template <typename K, typename V, bool enforceSortedOnRemove>
+  bool BigMap<K, V, enforceSortedOnRemove>::replace(const K& key, const V& val) {
+    BigMap::iterator it = rawFind(key);
+    if (it == m_keys.end())
+      return false;
+
+    *(it->second) = const_cast<V&>(val); //The promise not to change the original is maintained, but I need a non const copy internally
+    return true;
   };
 
   template <typename K, typename V, bool enforceSortedOnRemove>
@@ -302,8 +322,9 @@ namespace matan {
   }
 
   template <typename K, typename V, bool enforceSortedOnRemove>
+  template <bool noReplace>
   void BigMap<K, V, enforceSortedOnRemove>::rawAppend(const K& key, const V& val) {
-    if (replace(key, val))
+    if (!noReplace && replace(key, val))
         return;
 
     const bool reassign = (m_vals.size() == m_vals.capacity());
@@ -337,6 +358,14 @@ namespace matan {
   }
 
   template <typename K, typename V, bool enforceSortedOnRemove>
+  void BigMap<K, V, enforceSortedOnRemove>::batchAppend(const std::initializer_list<std::pair<K, V>>&& pairs) {
+    for (const std::pair<K, V>& it : pairs) {
+      rawAppend(it);
+    }
+    m_sorted = false;
+  }
+
+  template <typename K, typename V, bool enforceSortedOnRemove>
   template <typename IterK, typename IterV>
   void BigMap<K, V, enforceSortedOnRemove>::batchAppend(const IterK& keys, const IterV& vals) {
     zipAppend(keys, vals);
@@ -349,18 +378,22 @@ namespace matan {
   bool BigMap<K, V, enforceSortedOnRemove>::remove(const K& key) {
     //I think always will maintain m_deepSorted if true so don't need the template parameter
 
-    if (!hasKey(key))
+    iterator it = rawFind(key);
+    std::cout << it->first << ' ' << it->second << ' ' << *(it->second) << std::endl;
+
+    if (it == m_keys.end())
         return false;
 
     if (unlikely(m_keys.back().first == key)) {
       std::cout << "1" << std::endl;
       KV& backKey = m_keys.back();
-      V& backVal = m_vals.back();
+      const V& backVal = m_vals.back();
       if (likely(backKey.second != &backVal)) {
         for (auto& kv : m_keys) {
           if (unlikely(kv.second == &backVal)) {
             *backKey.second = backVal;
             kv.second = backKey.second;
+            break;
           }
         }
       }
@@ -368,11 +401,10 @@ namespace matan {
       m_keys.pop_back();
     } else if (enforceSorted && m_sorted && m_deepSorted) {
       std::cout << "2" << std::endl;
-      int valInd = std::abs(&((*this)[key]) - &(*m_vals.begin()));
-      const int size = m_keys.size();
-      for (; valInd < (size-1); valInd++) {
-        m_keys[valInd].first = m_keys[valInd+1].first;
-        m_vals[valInd] = m_vals[valInd+1];
+      const iterator end = m_keys.end();
+      for(; it != (end-1); it++) {
+        it->first = (it+1)->first;
+        *(it->second) = *((it+1)->second);
       }
       m_keys.pop_back();
       m_vals.pop_back();
@@ -380,11 +412,7 @@ namespace matan {
       std::cout << "3" << std::endl;
       const V* pBackVal = &m_vals.back();
       int backValKInd = -1;
-      const int valKInd = std::distance(m_keys.begin(),
-                                        std::lower_bound(m_keys.begin(),
-                                                         m_keys.end(),
-                                                         key,
-                                                         lowerKeyComp));
+      const int valKInd = std::distance(m_keys.begin(), it);
       const int size = m_keys.size();
       for (int i=0; i < valKInd; i++) {
         if (unlikely(m_keys[i].second == pBackVal)) {
@@ -406,10 +434,7 @@ namespace matan {
     } else if (m_deepSorted) {
       std::cout << "4" << std::endl;
       if (m_sorted) {
-        KV& kv = *std::lower_bound(m_keys.begin(),
-                                   m_keys.end(),
-                                   key,
-                                   lowerKeyComp);
+        KV& kv = *it;
         *kv.second = m_vals.back();
         kv.first = m_keys.back().first;
         m_keys.pop_back();
@@ -428,39 +453,39 @@ namespace matan {
     } else {
       std::cout << "5" << std::endl;
       V* val = &m_vals.back();
+
       auto checkVal =[this, val](ConstKV kv) {
         return kv.second == val;
       };
-      if (m_sorted) {
-        KV& kv = *std::lower_bound(m_keys.begin(),
-                                   m_keys.end(),
-                                   key,
-                                   lowerKeyComp);
-        KV& backVal = *std::find_if(m_keys.begin(),
-                                    m_keys.end(),
-                                    checkVal);
-        *kv.second = *backVal.second;
-        kv.first = backVal.first;
-        backVal = m_keys.back();
-        m_vals.pop_back();
-        m_keys.pop_back();
-      } else {
-        for (KV& kv : m_keys) {
-          if (unlikely(kv.first == key)) {
-            KV& backVal = *std::find_if(m_keys.begin(),
-                                        m_keys.end(),
-                                        checkVal);
-            *kv.second = *backVal.second;
-            kv.first = backVal.first;
-            backVal = m_keys.back();
-            m_vals.pop_back();
-            m_keys.pop_back();
-            break;
-          }
-        }
-      }
+
+      KV& backVal = *std::find_if(m_keys.begin(), m_keys.end(), checkVal);
+      *(it->second) = *backVal.second;
+      it->first = backVal.first;
+      backVal = m_keys.back();
+      m_vals.pop_back();
+      m_keys.pop_back();
     }
     return true;
+  }
+
+  template <typename K, typename V, bool enforceSortedOnRemove>
+  typename BigMap<K, V, enforceSortedOnRemove>::iterator BigMap<K, V, enforceSortedOnRemove>::rawFind(const K& key) {
+    const iterator beg = m_keys.begin();
+    const iterator end = m_keys.end();
+    if (m_sorted) {
+      const auto& it = std::lower_bound(beg, end, key, lowerKeyComp);
+      if (it != end && it->first == key)
+        return it;
+      else
+        return end;
+    }
+
+    for (auto it = beg; it != end; it++) {
+      if (unlikely(it->first==key))
+        return it;
+    }
+
+    return end; //Hope the constness isn't a problem
   }
 
   template <typename K, typename V, bool enforceSortedOnRemove>
@@ -490,3 +515,6 @@ namespace matan {
     }
   }
 } //namespace matan
+
+#undef unlikely
+#undef likely

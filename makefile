@@ -2,7 +2,7 @@
 #
 #  -g    adds debugging information to the executable file
 #  -Wall turns on most, but not all, compiler warnings
-CC = g++  # clang++
+CC = g++
 CFLAGS = -g -Wall -std=c++11
 BINDIR = bin
 
