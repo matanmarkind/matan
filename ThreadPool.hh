@@ -37,8 +37,9 @@ namespace matan {
 
   ThreadPool::ThreadPool(unsigned int n) :
           m_busy(0), m_processed(0), stop(false) {
-    for (unsigned int i = 0; i < n; ++i)
+    for (unsigned int i = 0; i < n; ++i) {
       m_workers.emplace_back(std::bind(&ThreadPool::threadProc, this));
+    }
   }
 
   ThreadPool::ThreadPool(const ThreadPool& tp) {
@@ -51,8 +52,9 @@ namespace matan {
     m_cvTask.notify_all();
     lock.unlock();
 
-    for (auto &t : m_workers)
+    for (auto &t : m_workers) {
       t.join();
+    }
   }
 
   void ThreadPool::threadProc() {
