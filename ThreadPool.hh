@@ -12,6 +12,7 @@
 #include <mutex>
 #include <atomic>
 #include <iostream>
+#include <vector>
 
 namespace matan {
   class ThreadPool {
@@ -29,7 +30,7 @@ namespace matan {
     std::mutex m_queueMutex;
     std::condition_variable m_cvTask;
     std::condition_variable m_cvFinished;
-    std::atomic_uint m_busy, m_processed;
+    int m_busy, m_processed;
     bool stop;
 
     void threadProc();
@@ -57,27 +58,6 @@ namespace matan {
     }
   }
 
-  void ThreadPool::threadProc() {
-    while (true) {
-      std::unique_lock<std::mutex> lock(m_queueMutex);
-      m_cvTask.wait(lock, [this]() { return stop || !m_tasks.empty(); });
-      if (!m_tasks.empty()) {
-        ++m_busy;
-        auto fn = m_tasks.front();
-        m_tasks.pop_front();
-        lock.unlock(); //stop blocking, run async
-
-        fn(); //run the function
-
-        ++m_processed;
-        --m_busy;
-        m_cvFinished.notify_one();
-      } else if (stop) {
-        break;
-      }
-    }
-  }
-
   template<class F, class... Args>
   void ThreadPool::enqueue(F&& f, Args&&... args) {
     std::unique_lock<std::mutex> lock(m_queueMutex);
@@ -91,5 +71,38 @@ namespace matan {
                       [this]() {
                         return m_tasks.empty() && (m_busy == 0);
                       });
+    m_busy = 0;
+    m_processed = 0;
   }
+
+  void ThreadPool::threadProc() {
+    while (true) {
+      std::unique_lock<std::mutex> lock(m_queueMutex);
+      m_cvTask.wait(lock, [this]() { return stop || !m_tasks.empty(); });
+      if (!m_tasks.empty()) {
+        ++m_busy;
+        auto fn = m_tasks.front();
+        m_tasks.pop_front();
+        lock.unlock();
+
+        //run the function without blocking the other threads
+        fn();
+
+        /*
+         * Need to lock this section so that don't make 'final' call of
+         * m_cvFinished.notify_one(), while another one is previously running.
+         * This will cause the notify to go unnoticed, beacause we won't be
+         * waiting at this point, and then will never again be notified.
+         */
+        lock.lock();
+        ++m_processed;
+        --m_busy;
+        m_cvFinished.notify_one();
+        lock.unlock();
+      } else if (stop) {
+        break;
+      }
+    }
+  }
+
 } //namespace matan

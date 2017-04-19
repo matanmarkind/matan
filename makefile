@@ -2,12 +2,16 @@
 #
 #  -g    adds debugging information to the executable file
 #  -Wall turns on most, but not all, compiler warnings
-CC = g++
-CFLAGS = -g -Wall -std=c++11
+CC = clang++
+CFLAGS = -g -Wall -std=c++14 -pthread
 BINDIR = bin
 
 bigmap: timsort.hh BigMap.hh bigmap.cc
-				$(CC) $(CFLAGS) timsort.hh BigMap.hh bigmap.cc -o $(BINDIR)/bigmap
+				$(CC) $(CFLAGS) bigmap.cc -o $(BINDIR)/bigmap
+
+threadpool: ThreadPool.hh threadpool.cc
+				$(CC) $(CFLAGS) threadpool.cc -o $(BINDIR)/threadpool
+
 
 # .PHONY is so that make doesn't confuse clean with a file
 .PHONY clean: 
