@@ -61,7 +61,8 @@ namespace matan {
   template<class F, class... Args>
   void ThreadPool::enqueue(F&& f, Args&&... args) {
     std::unique_lock<std::mutex> lock(m_queueMutex);
-    m_tasks.emplace_back(std::bind(f, args...));
+    auto func = [&f, &args...](){ f(args...); };
+    m_tasks.emplace_back(func);
     m_cvTask.notify_one();
   }
 
