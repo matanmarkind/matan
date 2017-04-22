@@ -6,7 +6,6 @@
  */
 
 #include <deque>
-#include <functional>
 #include <thread>
 #include <condition_variable>
 #include <mutex>
@@ -18,11 +17,10 @@ namespace matan {
   class ThreadPool {
   public:
     ThreadPool(const unsigned int n = std::thread::hardware_concurrency());
-    ThreadPool(const ThreadPool& tp);
+    ~ThreadPool();
+    int numThreads() const { return m_workers.size(); };
     template<class F, class... Args> void enqueue(F &&f, Args&&... args);
     void waitFinished();
-    ~ThreadPool();
-    unsigned int getProcessed() const { return m_processed; }
 
   private:
     std::vector<std::thread> m_workers;
@@ -30,21 +28,17 @@ namespace matan {
     std::mutex m_queueMutex;
     std::condition_variable m_cvTask;
     std::condition_variable m_cvFinished;
-    int m_busy, m_processed;
+    int m_busy;
     bool stop;
 
     void threadProc();
   };
 
   ThreadPool::ThreadPool(unsigned int n) :
-          m_busy(0), m_processed(0), stop(false) {
+          m_busy(0), stop(false) {
     for (unsigned int i = 0; i < n; ++i) {
-      m_workers.emplace_back(std::bind(&ThreadPool::threadProc, this));
+      m_workers.emplace_back([this](){this->threadProc();});
     }
-  }
-
-  ThreadPool::ThreadPool(const ThreadPool& tp) {
-    ThreadPool(tp.m_workers.capacity());
   }
 
   ThreadPool::~ThreadPool() {
@@ -73,7 +67,6 @@ namespace matan {
                         return m_tasks.empty() && (m_busy == 0);
                       });
     m_busy = 0;
-    m_processed = 0;
   }
 
   void ThreadPool::threadProc() {
@@ -89,14 +82,13 @@ namespace matan {
         //run the function without blocking the other threads
         fn();
 
+        lock.lock();
         /*
          * Need to lock this section so that don't make 'final' call of
          * m_cvFinished.notify_one(), while another one is previously running.
          * This will cause the notify to go unnoticed, beacause we won't be
          * waiting at this point, and then will never again be notified.
          */
-        lock.lock();
-        ++m_processed;
         --m_busy;
         m_cvFinished.notify_one();
         lock.unlock();
