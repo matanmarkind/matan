@@ -28,7 +28,6 @@ int main() {
     std::cout << "wait" << std::endl;
     tp.waitFinished();
     std::cout << "wait finished" << std::endl;
-    std::cout << tp.getProcessed() << '\n';
   }
 
   return 0;
