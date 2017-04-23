@@ -1,8 +1,6 @@
 /*
  * credit: WhozCraig on Stackoverflow
  * http://stackoverflow.com/questions/23896421/efficiently-waiting-for-all-m_tasks-in-a-threadpool-to-finish
- *
- * DOESN'T WORK :'(
  */
 
 #include <deque>
