@@ -3,7 +3,7 @@
 #  -g    adds debugging information to the executable file
 #  -Wall turns on most, but not all, compiler warnings
 CC = clang++
-CFLAGS = -g -Wall -std=c++14 -pthread
+CFLAGS = -g -Wall -std=c++1z -pthread
 BINDIR = bin
 
 bigmap: timsort.hh BigMap.hh bigmap.cc
