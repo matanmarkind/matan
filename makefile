@@ -12,6 +12,9 @@ bigmap: timsort.hh BigMap.hh bigmap.cc
 threadpool: ThreadPool.hh threadpool.cc
 				$(CC) $(CFLAGS) threadpool.cc -o $(BINDIR)/threadpool
 
+msgq: MessageQueue.hh message_queue.cc
+				$(CC) $(CFLAGS) message_queue.cc -o $(BINDIR)/msgq
+
 
 # .PHONY is so that make doesn't confuse clean with a file
 .PHONY clean: 

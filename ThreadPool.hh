@@ -2,6 +2,7 @@
  * credit: WhozCraig on Stackoverflow
  * http://stackoverflow.com/questions/23896421/efficiently-waiting-for-all-m_tasks-in-a-threadpool-to-finish
  */
+#pragma once
 
 #include <deque>
 #include <thread>
