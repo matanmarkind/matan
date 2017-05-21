@@ -15,6 +15,12 @@ class BunchQueue {
    *
    * It's use case is to be filled, then iterated through, and then reset.
    *
+   * Meant for usage with trivial classes, specifically structs as
+   * messages. The use of memcpy means I am not actually constructing
+   * an object in place, but just taking a shallow copy,
+   * and the use of realloc would only be valid for a trivially movable
+   * object.
+   *
    */
 public:
   BunchQueue(size_t initCapacity = 1) :
