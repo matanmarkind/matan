@@ -3,12 +3,60 @@
 #include <stdlib.h>
 #include <string.h>
 #include <mutex>
+#include <vector>
+#include <utility>
+#include <type_traits>
 
 #include "general.hh"
 
 namespace matan {
+
+template <typename T>
+class BaseQueue {
+public:
+  BaseQueue() = default;
+  void reset() { m_size=0; }
+  size_t size() const { return m_size; }
+  T* begin() { return m_vec; }
+  const T* begin() const { return m_vec; }
+  T* end() { return m_vec+m_size; }
+  const T* end() const { return m_vec+m_size; }
+
+protected:
+  T* m_vec = nullptr;
+  size_t m_capacity = 0;
+  size_t m_size = 0;
+};
+
+template <typename T>
+class TakerQueue : public BaseQueue<T> {
+  /*
+   * A vector, but you have to use std::move
+   */
+public:
+  TakerQueue(size_t initCapacity = 1) {
+    this->m_capacity = initCapacity;
+    this->m_vec = new T[this->m_capacity];
+  }
+  void push_back(T&& t) {
+    if (unlikely(this->m_size >= this->m_capacity)) {
+      this->m_capacity = this->m_capacity << 1;
+      T* oldVec = this->m_vec;
+      this->m_vec = new T[this->m_capacity];
+      for (size_t i = 0; i++; i < this->m_size) {
+        new (this->m_vec+i) T(std::move(oldVec[i]));
+      }
+      delete[] oldVec;
+    }
+    new (this->m_vec+this->m_size) T(t);
+    ++(this->m_size);
+  }
+};
+
+
 template <typename Msg>
-class BunchQueue {
+class MsgQueue : public BaseQueue<Msg>{
+  //TODO: figure out the correct concept to use to guarantee Msg is trivially movable
   /*
    * A queue that instead of freeing and allocating memory constantly
    * simply reuses the same memory overwriting the appropriate values.
@@ -23,34 +71,23 @@ class BunchQueue {
    *
    */
 public:
-  BunchQueue(size_t initCapacity = 1) :
-      m_capacity(initCapacity) {
-    m_vec = (Msg*) malloc(sizeof(Msg)*m_capacity);
+  MsgQueue(size_t initCapacity = 1) {
+    this->m_capacity = initCapacity;
+    this->m_vec = (Msg*) malloc(sizeof(Msg)*(this->m_capacity));
   }
-  void reset() { m_size=0; }
-  size_t size() const { return m_size; }
-  Msg* begin() { return m_vec; }
-  const Msg* begin() const { return m_vec; }
-  Msg* end() { return m_vec+m_size; }
-  const Msg* end() const { return m_vec+m_size; }
   void push_back(const Msg& msg) {
-    if (unlikely(m_size >= m_capacity)) {
-      m_capacity = m_capacity << 1;
-      m_vec = (Msg*) realloc(m_vec, sizeof(Msg)*m_capacity);
+    if (unlikely(this->m_size >= this->m_capacity)) {
+      this->m_capacity = this->m_capacity << 1;
+      this->m_vec = (Msg*) realloc(this->m_vec, sizeof(Msg)*this->m_capacity);
     }
-    memcpy(m_vec+m_size, &msg, sizeof(Msg));
-    ++m_size;
+    memcpy(this->m_vec+this->m_size, &msg, sizeof(Msg));
+    ++(this->m_size);
   }
-
-private:
-  Msg* m_vec;
-  size_t m_capacity;
-  size_t m_size = 0;
 };
 
 
-template <typename Msg>
-class MessageQueue {
+template <template<typename> typename Queue, typename T>
+class BunchQueue {
   /*
    * Multi writer single reader.
    *
@@ -63,17 +100,17 @@ class MessageQueue {
    * expect fairly consistent bunch sizes.
    */
 public:
-  MessageQueue(size_t initCapacity = 1) :
+  BunchQueue(size_t initCapacity = 1) :
     m_queueA(initCapacity), m_queueB(initCapacity) {
   }
-  void push_back(const Msg& msg) {
+  void push_back(const T& msg) {
     m_mtx.lock();
     auto& q = getQueue();
     q.push_back(msg);
     m_mtx.unlock();
   }
 
-  const BunchQueue<Msg>& takeQueue() {
+  const Queue<T>& takeQueue() {
     m_mtx.lock();
     auto q = &(getQueue());
     m_whichQueue = !m_whichQueue;
@@ -87,8 +124,14 @@ public:
 private:
   bool m_whichQueue = true;
   std::mutex m_mtx;
-  BunchQueue<Msg> m_queueA;
-  BunchQueue<Msg> m_queueB;
-  BunchQueue<Msg>& getQueue() { return m_whichQueue ? m_queueA : m_queueB; };
+  Queue<T> m_queueA;
+  Queue<T> m_queueB;
+  Queue<T>& getQueue() { return m_whichQueue ? m_queueA : m_queueB; };
 };
+
+template <typename Msg>
+using MessageQueue = BunchQueue<MsgQueue, Msg>;
+
+typedef BunchQueue<TakerQueue, std::string> LoggerQueue;
+
 } //namespace matan
