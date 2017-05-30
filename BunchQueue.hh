@@ -14,7 +14,8 @@ namespace matan {
 template <typename T>
 class BaseQueue {
 public:
-  BaseQueue() = default;
+  typedef T value_type;
+  BaseQueue(size_t initCapacity) : m_capacity(initCapacity) {}
   void reset() { m_size=0; }
   size_t size() const { return m_size; }
   T* begin() { return m_vec; }
@@ -34,11 +35,10 @@ class TakerQueue : public BaseQueue<T> {
    * A vector, but you have to use std::move
    */
 public:
-  TakerQueue(size_t initCapacity = 1) {
-    this->m_capacity = initCapacity;
+  TakerQueue(size_t initCapacity = 1) :  BaseQueue<T>(initCapacity) {
     this->m_vec = new T[this->m_capacity];
   }
-  void push_back(T&& t) {
+  void push_back(T& t) {
     if (unlikely(this->m_size >= this->m_capacity)) {
       this->m_capacity = this->m_capacity << 1;
       T* oldVec = this->m_vec;
@@ -48,15 +48,15 @@ public:
       }
       delete[] oldVec;
     }
-    new (this->m_vec+this->m_size) T(t);
+    new (this->m_vec+this->m_size) T(std::move(t));
     ++(this->m_size);
   }
 };
 
 
-template <typename Msg>
-class MsgQueue : public BaseQueue<Msg>{
-  //TODO: figure out the correct concept to use to guarantee Msg is trivially movable
+template <typename T>
+class ShallowQueue : public BaseQueue<T>{
+  //TODO: figure out the correct concept to use to guarantee T is trivially movable at compile time
   /*
    * A queue that instead of freeing and allocating memory constantly
    * simply reuses the same memory overwriting the appropriate values.
@@ -66,27 +66,25 @@ class MsgQueue : public BaseQueue<Msg>{
    * Meant for usage with trivial classes, specifically structs as
    * messages. The use of memcpy means I am not actually constructing
    * an object in place, but just taking a shallow copy,
-   * and the use of realloc would only be valid for a trivially movable
+   * and the use of realloc  in vectors is only be valid for a trivially movable
    * object.
    *
    */
 public:
-  MsgQueue(size_t initCapacity = 1) {
-    this->m_capacity = initCapacity;
-    this->m_vec = (Msg*) malloc(sizeof(Msg)*(this->m_capacity));
+  ShallowQueue(size_t initCapacity = 1) : BaseQueue<T>(initCapacity) {
+    this->m_vec = (T*) malloc(sizeof(T)*(this->m_capacity));
   }
-  void push_back(const Msg& msg) {
+  void push_back(const T& msg) {
     if (unlikely(this->m_size >= this->m_capacity)) {
       this->m_capacity = this->m_capacity << 1;
-      this->m_vec = (Msg*) realloc(this->m_vec, sizeof(Msg)*this->m_capacity);
+      this->m_vec = (T*) realloc(this->m_vec, sizeof(T)*this->m_capacity);
     }
-    memcpy(this->m_vec+this->m_size, &msg, sizeof(Msg));
+    memcpy(this->m_vec+this->m_size, &msg, sizeof(T));
     ++(this->m_size);
   }
 };
 
-
-template <template<typename> typename Queue, typename T>
+template <typename Queue>
 class BunchQueue {
   /*
    * Multi writer single reader.
@@ -103,14 +101,14 @@ public:
   BunchQueue(size_t initCapacity = 1) :
     m_queueA(initCapacity), m_queueB(initCapacity) {
   }
-  void push_back(const T& msg) {
+  void push_back(const typename Queue::value_type& msg) {
     m_mtx.lock();
     auto& q = getQueue();
     q.push_back(msg);
     m_mtx.unlock();
   }
 
-  const Queue<T>& takeQueue() {
+  const Queue& takeQueue() {
     m_mtx.lock();
     auto q = &(getQueue());
     m_whichQueue = !m_whichQueue;
@@ -124,14 +122,14 @@ public:
 private:
   bool m_whichQueue = true;
   std::mutex m_mtx;
-  Queue<T> m_queueA;
-  Queue<T> m_queueB;
-  Queue<T>& getQueue() { return m_whichQueue ? m_queueA : m_queueB; };
+  Queue m_queueA;
+  Queue m_queueB;
+  Queue& getQueue() { return m_whichQueue ? m_queueA : m_queueB; };
 };
 
 template <typename Msg>
-using MessageQueue = BunchQueue<MsgQueue, Msg>;
+using MessageQueue = BunchQueue<ShallowQueue<Msg>>;
 
-typedef BunchQueue<TakerQueue, std::string> LoggerQueue;
+typedef BunchQueue<TakerQueue<std::string>> LoggerQueue;
 
 } //namespace matan
