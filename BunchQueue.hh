@@ -43,7 +43,7 @@ public:
       this->m_capacity = this->m_capacity << 1;
       T* oldVec = this->m_vec;
       this->m_vec = new T[this->m_capacity];
-      for (size_t i = 0; i++; i < this->m_size) {
+      for (size_t i = 0; i < this->m_size; i++) {
         new (this->m_vec+i) T(std::move(oldVec[i]));
       }
       delete[] oldVec;
@@ -108,6 +108,13 @@ public:
     m_mtx.unlock();
   }
 
+  void push_back(typename Queue::value_type& msg) {
+    m_mtx.lock();
+    auto& q = getQueue();
+    q.push_back(msg);
+    m_mtx.unlock();
+  }
+
   const Queue& takeQueue() {
     m_mtx.lock();
     auto q = &(getQueue());
@@ -129,7 +136,5 @@ private:
 
 template <typename Msg>
 using MessageQueue = BunchQueue<ShallowQueue<Msg>>;
-
-typedef BunchQueue<TakerQueue<std::string>> LoggerQueue;
 
 } //namespace matan
