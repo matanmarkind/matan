@@ -22,10 +22,10 @@ int main() {
   std::cout
     << duration_cast<nanoseconds>(high_resolution_clock::now()-start1).count()
     << std::endl;
-  matan::Logger<std::string> logger("/tmp/logger.log");
+  matan::Logger logger("/tmp/logger.log");
   auto start2 = high_resolution_clock::now();
   for (auto& lyric : lyric_vec) {
-    logger.write(lyric);
+    logger << lyric << matan::endlog;
   }
   std::cout
     << duration_cast<nanoseconds>(high_resolution_clock::now()-start2).count()
