@@ -39,7 +39,7 @@ public:
     m_buf += c;
     return *this;
   }
-  Logger& operator<< (Logger& (*pf)(Logger&)) {
+  Logger& operator<<(Logger& (*pf)(Logger&)) {
     pf(*this);
     return *this;
   }
@@ -88,10 +88,12 @@ private:
   std::condition_variable m_shouldWrite;
 };
 
-Logger& endlog(Logger& logger) {
+} // matan
+
+namespace std {
+matan::Logger& endl(matan::Logger& logger) {
   logger << '\n';
   logger.flush();
   return logger;
 }
-
-} // matan
+}
