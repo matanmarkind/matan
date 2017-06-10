@@ -15,8 +15,11 @@ threadpool: ThreadPool.hh threadpool.cc
 msgq: BunchQueue.hh message_queue.cc
 				$(CC) $(CFLAGS) message_queue.cc -o $(BINDIR)/msgq
 
-logger: BunchQueue.hh Logger.hh logger.cc
-				$(CC) $(CFLAGS) logger.cc -o $(BINDIR)/logger
+logger: Logger.o logger.cc
+				$(CC) $(CFLAGS) Logger.o logger.cc -o $(BINDIR)/logger
+
+Logger.o: BunchQueue.hh Logger.hh Logger.cc
+				$(CC) $(CFLAGS) -c Logger.cc
 
 # .PHONY is so that make doesn't confuse clean with a file
 .PHONY clean: 

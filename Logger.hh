@@ -14,60 +14,20 @@ namespace matan {
 
 class BunchLogger {
 public:
-  BunchLogger(const std::string& ofname, bool wait = false) :
-    m_bWait(wait),
-    m_ofstream(ofname, std::ios::out),
-    m_worker([this]() { this->doit();}) {}
-  ~BunchLogger() {
-    awake();
-    m_bDone = true;
-    trueFlush();
-    m_worker.join(); //Perhaps I should detach?
-    m_ofstream.close();
-  }
+  BunchLogger(const std::string& ofname, bool wait = false);
+  ~BunchLogger();
   void awake() { m_bWait = false; m_shouldWrite.notify_one(); }
   void sleep() { m_bWait = true; }
   const std::string& contents() { return m_buf; };
   void flush() { m_logs.push_back(m_buf); m_buf.clear(); }
-  BunchLogger& operator<<(const std::string& str) {
-    m_buf += str;
-    return *this;
-  }
-  BunchLogger& operator<<(const char* c) {
-    m_buf += c;
-    return *this;
-  }
-  BunchLogger& operator<<(char c) {
-    m_buf += c;
-    return *this;
-  }
-  BunchLogger& operator<<(BunchLogger& (*pf)(BunchLogger&)) {
-    pf(*this);
-    return *this;
-  }
-  friend BunchLogger& endlog(BunchLogger& l);
+  BunchLogger& operator<<(const std::string& str) {m_buf += str; return *this;}
+  BunchLogger& operator<<(const char* c) { m_buf += c; return *this; }
+  BunchLogger& operator<<(char c) { m_buf += c; return *this; }
+  BunchLogger& operator<<(BunchLogger& (*pf)(BunchLogger&)) {pf(*this); return *this;}
 
 private:
-  void doit() {
-    std::mutex mut;
-    std::unique_lock<std::mutex> lock(mut);
-    while (true) {
-      if (m_bWait) {
-        m_shouldWrite.wait(lock);
-      }
-      trueFlush();
-      if (m_bDone) {
-        break;
-      }
-    }
-  }
-
-  void trueFlush() {
-      for (const auto& line : m_logs.takeQueue()) {
-        m_ofstream << line;
-        m_ofstream.flush();
-      }
-  }
+  void doit();
+  void trueFlush();
 
   bool m_bDone = false;
   bool m_bWait;
@@ -78,12 +38,10 @@ private:
   std::condition_variable m_shouldWrite;
 };
 
-
-
 } // matan
 
 namespace std {
-matan::BunchLogger& endl(matan::BunchLogger& logger) {
+inline matan::BunchLogger& endl(matan::BunchLogger& logger) {
   logger << '\n';
   logger.flush();
   return logger;
