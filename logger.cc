@@ -1,10 +1,10 @@
-#include "Logger.hh"
 #include <string>
 #include <sstream>
 #include <algorithm>
 #include <iterator>
 #include <iostream>
 #include <chrono>
+#include "Logger.hh"
 
 using namespace std::chrono;
 
@@ -22,7 +22,7 @@ int main() {
   std::cout
     << duration_cast<nanoseconds>(high_resolution_clock::now()-start1).count()
     << std::endl;
-  matan::Logger logger("/tmp/logger.log");
+  matan::BunchLogger logger("/tmp/logger.log");
   auto start2 = high_resolution_clock::now();
   for (auto& lyric : lyric_vec) {
     logger << lyric << std::endl;
