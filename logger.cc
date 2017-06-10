@@ -22,13 +22,23 @@ int main() {
   std::cout
     << duration_cast<nanoseconds>(high_resolution_clock::now()-start1).count()
     << std::endl;
-  matan::BunchLogger logger("/tmp/logger.log");
+
+  matan::BufferLogger bufLogger("/tmp/logger2.log");
   auto start2 = high_resolution_clock::now();
   for (auto& lyric : lyric_vec) {
-    logger << lyric << std::endl;
+    bufLogger << lyric << std::endl;
   }
   std::cout
     << duration_cast<nanoseconds>(high_resolution_clock::now()-start2).count()
+    << std::endl;
+
+  matan::BunchLogger bunchLogger("/tmp/logger3.log");
+  auto start3 = high_resolution_clock::now();
+  for (auto& lyric : lyric_vec) {
+    bunchLogger << lyric << std::endl;
+  }
+  std::cout
+    << duration_cast<nanoseconds>(high_resolution_clock::now()-start3).count()
     << std::endl;
   return 0;
 }
