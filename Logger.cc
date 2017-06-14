@@ -36,10 +36,10 @@ void Logger::doit() {
   lock.unlock();
   while (true) {
     /*
-     * Need to make sure that we don't have a situation where we return empty,
-     * but before the logging thread waits the writer thread pushes back a new
-     * log and calls notify_one since then this log would be waiting when it
-     * should have been notified.
+     * Need to make sure that we don't have a situation where with
+     * m_logs.empty() is true, but before the flushing thread waits the writer
+     * thread pushes back a new log and calls notify_one since then this thread
+     * would be waiting only start waiting after it was supposed to be notified.
      */
     lock.lock();
     if (m_logs.empty()) {
