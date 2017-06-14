@@ -35,6 +35,11 @@ private:
   std::thread m_worker;
   std::mutex m_mtx;
   std::condition_variable m_shouldWrite;
+  /*
+   * I'm making a guess here that one page in memory is 4KB and that it will
+   * be fastest if I can stay on one page (I need to pick a threshold
+   * somehow) and that most logs will be less than 1024 characters.
+   */
   static constexpr std::size_t MAX_LEN = 3 * 1024;
 };
 
