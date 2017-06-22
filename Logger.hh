@@ -1,40 +1,42 @@
 #pragma once
 
-#include "BunchQueue.hh"
+#include "BunchQueueWorker.hh"
 #include <fstream>
 #include <string>
-#include <condition_variable>
-#include <thread>
-#include <atomic>
 
 /*
  * Has LogQueue, file to write to.
  */
 namespace matan {
 
-class Logger {
+typedef BunchQueueWorker<TakerQueue, std::string> LoggerBase;
+
+class Logger : public LoggerBase {
+  /*
+   * Logger intended to prevent IO from blocking. Pushes the actual writing
+   * to disk onto a separate thread.
+   *
+   * Single writer. To make the interface similar to std::cout we need to allow
+   * separate calls to operator<<. For this to be multi writer we would need
+   * each operator<< call to contain a complete elements, as opposed to
+   * building it within m_buf and only later flushing it. (Please note this
+   * issue would exist even if we actually flushed on every call to flush()).
+   */
 public:
   Logger(const std::string& ofname);
-  ~Logger();
+  virtual ~Logger();
   Logger& operator<<(const std::string& str) {m_buf += str; return *this;}
   Logger& operator<<(const char* c) { m_buf += c; return *this; }
   Logger& operator<<(char c) { m_buf += c; return *this; }
   Logger& operator<<(Logger& (*pf)(Logger&)) {return pf(*this);}
   void flush();
-  void finish();
 
 private:
   void doFlush();
-  void doit();
-  void trueFlush();
+  virtual void doit();
 
-  bool m_bDone = false;
   std::string m_buf;
-  BunchQueue<TakerQueue<std::string>> m_logs;
   std::ofstream m_ofstream;
-  std::thread m_worker;
-  std::mutex m_mtx;
-  std::condition_variable m_shouldWrite;
   /*
    * I'm making a guess here that one page in memory is 4KB and that it will
    * be fastest if I can stay on one page (I need to pick a threshold
