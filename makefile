@@ -18,7 +18,7 @@ msgq: BunchQueue.hh message_queue.cc
 logger: Logger.o logger.cc
 				$(CC) $(CFLAGS) Logger.o logger.cc -o $(BINDIR)/logger
 
-Logger.o: BunchQueue.hh BunchQueueWorker.hh Logger.hh Logger.cc
+Logger.o: BunchQueue.hh AsyncWorker.hh Logger.hh Logger.cc
 				$(CC) $(CFLAGS) -c Logger.cc
 
 # .PHONY is so that make doesn't confuse clean with a file

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "BunchQueueWorker.hh"
+#include "AsyncWorker.hh"
 #include <fstream>
 #include <string>
 
@@ -9,9 +9,7 @@
  */
 namespace matan {
 
-typedef BunchQueueWorker<TakerQueue, std::string> LoggerBase;
-
-class Logger : public LoggerBase {
+class Logger : public AsyncWorker {
   /*
    * Logger intended to prevent IO from blocking. Pushes the actual writing
    * to disk onto a separate thread.
@@ -34,9 +32,11 @@ public:
 private:
   void doFlush();
   virtual void doit();
+  virtual bool shouldSleep() { return m_contents.empty(); }
 
   std::string m_buf;
   std::ofstream m_ofstream;
+  BunchQueue<TakerQueue<std::string>> m_contents;
   /*
    * I'm making a guess here that one page in memory is 4KB and that it will
    * be fastest if I can stay on one page (I need to pick a threshold
