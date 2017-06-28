@@ -6,6 +6,7 @@
 #include <vector>
 #include <utility>
 #include <type_traits>
+#include <condition_variable>
 
 #include "general.hh"
 
@@ -36,13 +37,13 @@ class TakerQueue : public BaseQueue<T> {
    */
 public:
   TakerQueue(size_t initCapacity = 1) :  BaseQueue<T>(initCapacity) {
-    this->m_vec = new T[this->m_capacity];
+    this->m_vec = (T*) malloc(sizeof(T)*(this->m_capacity));
   }
   void push_back(T& t) {
     if (unlikely(this->m_size >= this->m_capacity)) {
       this->m_capacity = this->m_capacity << 1;
       T* oldVec = this->m_vec;
-      this->m_vec = new T[this->m_capacity];
+      this->m_vec = (T*) malloc(sizeof(T)*(this->m_capacity));
       for (size_t i = 0; i < this->m_size; i++) {
         new (this->m_vec+i) T(std::move(oldVec[i]));
       }
@@ -102,36 +103,39 @@ public:
     m_queueA(initCapacity), m_queueB(initCapacity) {
   }
   void push_back(const typename Queue::value_type& msg) {
-    m_mtx.lock();
+    std::unique_lock<std::mutex> lock(m_mtx);
     auto& q = getQueue();
     q.push_back(msg);
-    m_mtx.unlock();
   }
 
   void push_back(typename Queue::value_type& msg) {
-    m_mtx.lock();
+    std::unique_lock<std::mutex> lock(m_mtx);
     auto& q = getQueue();
     q.push_back(msg);
-    m_mtx.unlock();
   }
 
   const Queue& takeQueue() {
-    m_mtx.lock();
+    std::unique_lock<std::mutex> lock(m_mtx);
     auto q = &(getQueue());
     m_whichQueue = !m_whichQueue;
     getQueue().reset();
-    m_mtx.unlock();
     return *q;
   }
 
-  bool empty() { return m_queueA.size() == 0 && m_queueB.size() == 0; }
+  bool empty() {
+    std::unique_lock<std::mutex> lock(m_mtx);
+    return m_queueA.size() == 0 && m_queueB.size() == 0;
+  }
 
 private:
   bool m_whichQueue = true;
   std::mutex m_mtx;
   Queue m_queueA;
   Queue m_queueB;
-  Queue& getQueue() { return m_whichQueue ? m_queueA : m_queueB; };
+  Queue& getQueue() {
+    //Only for use in takeQueue, haven't considered general use for thread safety
+    return m_whichQueue ? m_queueA : m_queueB;
+  }
 };
 
 template <typename Msg>

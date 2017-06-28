@@ -1,8 +1,8 @@
 #pragma once
 
 #include "BunchQueue.hh"
-#include <condition_variable>
 #include <thread>
+#include <atomic>
 
 #include <iostream>  //PUSH_ASSERT
 
@@ -25,20 +25,14 @@ public:
 
 protected:
   void workerLoop() {
-    std::unique_lock<std::mutex> lock(m_mtx);
-    lock.unlock();
     while (true) {
-      lock.lock();
-      if (shouldSleep()) {
-        m_shouldDoit.wait(lock);
-      }
-      lock.unlock();
+      waitTillNeeded();
       doit();
-      if (m_bDone) {
+      if (unlikely(m_bDone)) {
         break;
       }
-      doit();
     }
+    doit();
   }
 
   /*
@@ -55,26 +49,30 @@ protected:
   virtual bool shouldSleep() = 0;
 
   /*
-   * Need to prevent this situation (in this order) so as not to miss a
-   * notify when deciding to wait.
-   *
-   * flush_thread: m_logs.empty() == true
-   * write_thread: m_logs.push_back(m_buf)
-   * write_thread: m_shouldWrite.notify_one()
-   * flush_thread: m_shouldWrite.wait(lock)
+   * Locked so that waitTillNeeded can't be in an indeterminate state. Either
+   * set beforehand so never wait, or set after already waiting so that the
+   * notify that follows won't be waster in between the boolean and the
+   * actual call to wait.
    */
-  void notifyNewEle() {
-    m_mtx.lock();
+  void done() {
+    std::unique_lock<std::mutex> lock(m_mtx);
+    m_bDone = true;
     m_shouldDoit.notify_one();
-    m_mtx.unlock();
   }
 
-  bool m_bDone = false;
+  std::atomic_bool m_bDone{false};
   std::thread m_worker;
+  std::condition_variable m_shouldDoit;
 
 private:
+  void waitTillNeeded() {
+    std::unique_lock<std::mutex> lock(m_mtx);
+    if (!m_bDone && shouldSleep()) {
+      m_shouldDoit.wait(lock);
+    }
+  }
+
   std::mutex m_mtx;
-  std::condition_variable m_shouldDoit;
 };
 
 inline AsyncWorker::~AsyncWorker() {}
