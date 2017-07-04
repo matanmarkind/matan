@@ -33,6 +33,8 @@ protected:
       }
     }
     doit();
+    m_bActuallyDone = true;
+    m_cvDone.notify_one();
   }
 
   /*
@@ -58,9 +60,13 @@ protected:
     std::unique_lock<std::mutex> lock(m_mtx);
     m_bDone = true;
     m_shouldDoit.notify_one();
+    // Wanna see if mistakenly think resource_deadlock
+    m_cvDone.wait(lock, []{ return m_bActuallyDone; });
+    m_worker.join();
   }
 
   std::atomic_bool m_bDone{false};
+  std::atomic_bool m_bActuallyDone{false};
   std::thread m_worker;
   std::condition_variable m_shouldDoit;
 
