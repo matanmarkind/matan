@@ -14,7 +14,6 @@ Logger::Logger(const std::string& ofname) :
 Logger::~Logger() {
   doFlush();
   done();
-  m_worker.join();
   m_ofstream.close();
 }
 
