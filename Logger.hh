@@ -22,17 +22,27 @@ class Logger : public AsyncWorker {
    */
 public:
   Logger(const std::string& ofname);
-  virtual ~Logger();
+  virtual ~Logger() = default;
+  Logger(const Logger&) = delete;
   Logger& operator<<(const std::string& str) {m_buf += str; return *this;}
   Logger& operator<<(const char* c) { m_buf += c; return *this; }
   Logger& operator<<(char c) { m_buf += c; return *this; }
   Logger& operator<<(Logger& (*pf)(Logger&)) {return pf(*this);}
   void flush();
+  void close();
 
 private:
   void doFlush();
   virtual void doit();
-  virtual bool shouldSleep() { return m_contents.empty(); }
+  virtual bool shouldSleep() { 
+    try {
+      return m_contents.empty();
+    } catch (const std::system_error& e) {
+      std::cout << "error checking m_contents.empty()" << std::endl;
+      throw e;
+    }
+    return m_contents.empty();
+  }
 
   std::string m_buf;
   std::ofstream m_ofstream;

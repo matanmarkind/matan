@@ -33,5 +33,7 @@ int main() {
     << duration_cast<nanoseconds>(high_resolution_clock::now()-start2).count()
     << std::endl;
 
+  bunchLogger.close();
+  std::cout << "finish logger" << std::endl;
   return 0;
 }

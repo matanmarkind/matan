@@ -11,7 +11,7 @@ Logger::Logger(const std::string& ofname) :
     AsyncWorker(),
     m_ofstream(ofname, std::ios::out) {}
 
-Logger::~Logger() {
+void Logger::close() {
   doFlush();
   done();
   m_ofstream.close();
@@ -25,7 +25,7 @@ void Logger::flush() {
 
 void Logger::doFlush() {
   m_contents.push_back(m_buf);
-  m_shouldDoit.notify_one();
+  notifyWorker();
   m_buf.clear();
 }
 

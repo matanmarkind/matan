@@ -4,8 +4,6 @@
 #include <thread>
 #include <atomic>
 
-#include <iostream>  //PUSH_ASSERT
-
 namespace matan {
 
 class AsyncWorker {
@@ -20,21 +18,20 @@ class AsyncWorker {
    * can take multiple writers.
    */
 public:
-  AsyncWorker() : m_worker([this]() { this->workerLoop();}) {}
+  AsyncWorker() : m_worker(new std::thread([this]() { this->workerLoop();})) {}
   virtual ~AsyncWorker() = 0;
+  AsyncWorker(const AsyncWorker&) = delete;
 
 protected:
   void workerLoop() {
-    while (true) {
-      waitTillNeeded();
-      doit();
-      if (unlikely(m_bDone)) {
-        break;
+      while (true) {
+        waitTillNeeded();
+        doit();
+        if (unlikely(m_bDone)) {
+          break;
+        }
       }
-    }
-    doit();
-    m_bActuallyDone = true;
-    m_cvDone.notify_one();
+      doit();
   }
 
   /*
@@ -59,24 +56,37 @@ protected:
   void done() {
     std::unique_lock<std::mutex> lock(m_mtx);
     m_bDone = true;
+    notifyWorker();
+    lock.unlock();
+    m_worker->join();
+  }
+  
+  void notifyWorker() {
+    m_bRealWakeup = true;
     m_shouldDoit.notify_one();
-    // Wanna see if mistakenly think resource_deadlock
-    m_cvDone.wait(lock, []{ return m_bActuallyDone; });
-    m_worker.join();
   }
 
   std::atomic_bool m_bDone{false};
-  std::atomic_bool m_bActuallyDone{false};
-  std::thread m_worker;
+  std::atomic_bool m_bRealWakeup{false};
+  std::unique_ptr<std::thread> m_worker;
   std::condition_variable m_shouldDoit;
 
 private:
   void waitTillNeeded() {
+    try {
+      shouldSleep();
+    } catch (const std::system_error& e) {
+      std::cout << "error shouldSleep" << std::endl;
+    }
     std::unique_lock<std::mutex> lock(m_mtx);
     if (!m_bDone && shouldSleep()) {
-      m_shouldDoit.wait(lock);
+      m_bRealWakeup = false;
+      m_shouldDoit.wait(lock, [this] { return this->realWakeup(); });
     }
   }
+
+  //Prevent spurious system wake up calls
+  bool realWakeup() { return m_bRealWakeup; }
 
   std::mutex m_mtx;
 };
