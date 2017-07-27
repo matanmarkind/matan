@@ -34,7 +34,7 @@ public:
 private:
   void doFlush();
   virtual void doit();
-  virtual bool shouldSleep() { 
+  virtual bool shouldSleep() const { 
     try {
       return m_contents.empty();
     } catch (const std::system_error& e) {

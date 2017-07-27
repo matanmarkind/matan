@@ -45,7 +45,7 @@ protected:
    * Checks if there is any work for the worker thread to do, and if not puts
    * the thread to sleep.
    */
-  virtual bool shouldSleep() = 0;
+  virtual bool shouldSleep() const = 0;
 
   /*
    * Locked so that waitTillNeeded can't be in an indeterminate state. Either
