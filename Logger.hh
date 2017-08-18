@@ -4,12 +4,9 @@
 #include <fstream>
 #include <string>
 
-/*
- * Has LogQueue, file to write to.
- */
 namespace matan {
 
-class Logger : public AsyncWorker {
+class Logger final : public AsyncWorker {
   /*
    * Logger intended to prevent IO from blocking. Pushes the actual writing
    * to disk onto a separate thread.
@@ -33,20 +30,12 @@ public:
 
 private:
   void doFlush();
-  virtual void doit();
-  virtual bool shouldSleep() const { 
-    try {
-      return m_contents.empty();
-    } catch (const std::system_error& e) {
-      std::cout << "error checking m_contents.empty()" << std::endl;
-      throw e;
-    }
-    return m_contents.empty();
-  }
+  virtual void doit() override;
+  virtual bool shouldSleep() const override { return m_contents.empty(); }
 
   std::string m_buf;
   std::ofstream m_ofstream;
-  BunchQueue<TakerQueue<std::string>> m_contents;
+  BunchQueue<std::string> m_contents;
   /*
    * I'm making a guess here that one page in memory is 4KB and that it will
    * be fastest if I can stay on one page (I need to pick a threshold

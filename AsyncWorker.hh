@@ -18,20 +18,21 @@ class AsyncWorker {
    * can take multiple writers.
    */
 public:
-  AsyncWorker() : m_worker(new std::thread([this]() { this->workerLoop();})) {}
+  AsyncWorker() {}
   virtual ~AsyncWorker() = 0;
   AsyncWorker(const AsyncWorker&) = delete;
+  void init() { m_worker.reset(new std::thread([this]() { this->workerLoop(); })); }
 
 protected:
   void workerLoop() {
-      while (true) {
-        waitTillNeeded();
-        doit();
-        if (unlikely(m_bDone)) {
-          break;
-        }
-      }
+    while (true) {
+      waitTillNeeded();
       doit();
+      if (unlikely(m_bDone)) {
+        break;
+      }
+    }
+    doit();
   }
 
   /*
@@ -50,10 +51,11 @@ protected:
   /*
    * Locked so that waitTillNeeded can't be in an indeterminate state. Either
    * set beforehand so never wait, or set after already waiting so that the
-   * notify that follows won't be waster in between the boolean and the
+   * notify that follows won't be wasted in between the boolean and the
    * actual call to wait.
    */
   void done() {
+    std::cout << "done" << std::endl;
     std::unique_lock<std::mutex> lock(m_mtx);
     m_bDone = true;
     notifyWorker();
