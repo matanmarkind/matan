@@ -15,7 +15,7 @@
 namespace matan {
   class ThreadPool {
   public:
-    ThreadPool(const unsigned int n = std::thread::hardware_concurrency());
+    ThreadPool(int n = std::thread::hardware_concurrency());
     ~ThreadPool();
     int numThreads() const { return m_workers.size(); };
     template<class F, class... Args> void enqueue(F &&f, Args&&... args);
@@ -27,22 +27,21 @@ namespace matan {
     std::mutex m_queueMutex;
     std::condition_variable m_cvTask;
     std::condition_variable m_cvFinished;
-    int m_busy;
-    bool stop;
+    int m_busy = 0;
+    bool m_bStop = false;
 
     void threadProc();
   };
 
-  ThreadPool::ThreadPool(unsigned int n) :
-          m_busy(0), stop(false) {
-    for (unsigned int i = 0; i < n; ++i) {
+  ThreadPool::ThreadPool(int n) {
+    for (int i = 0; i < n; ++i) {
       m_workers.emplace_back([this](){this->threadProc();});
     }
   }
 
   ThreadPool::~ThreadPool() {
     std::unique_lock<std::mutex> lock(m_queueMutex);
-    stop = true;
+    m_bStop = true;
     m_cvTask.notify_all();
     lock.unlock();
 
@@ -50,11 +49,11 @@ namespace matan {
       t.join();
     }
   }
-
+  
   template<class F, class... Args>
   void ThreadPool::enqueue(F&& f, Args&&... args) {
     std::unique_lock<std::mutex> lock(m_queueMutex);
-    auto func = [&f, &args...](){ f(args...); };
+    auto func = [&f, args...](){ f(args...); };
     m_tasks.emplace_back(func);
     m_cvTask.notify_one();
   }
@@ -71,15 +70,14 @@ namespace matan {
   void ThreadPool::threadProc() {
     while (true) {
       std::unique_lock<std::mutex> lock(m_queueMutex);
-      m_cvTask.wait(lock, [this]() { return stop || !m_tasks.empty(); });
+      m_cvTask.wait(lock, [this]() { return m_bStop || !m_tasks.empty(); });
       if (!m_tasks.empty()) {
         ++m_busy;
         auto fn = m_tasks.front();
         m_tasks.pop_front();
         lock.unlock();
 
-        //run the function without blocking the other threads
-        fn();
+        fn(); //run the function without blocking the other threads
 
         lock.lock();
         /*
@@ -91,7 +89,7 @@ namespace matan {
         --m_busy;
         m_cvFinished.notify_one();
         lock.unlock();
-      } else if (stop) {
+      } else if (m_bStop) {
         break;
       }
     }

@@ -6,7 +6,7 @@
 #include <future>
 
 // a cpu-busy task.
-void work_proc(unsigned int n) {
+void work_proc(int n) {
   std::random_device rd;
   std::mt19937 rng(rd());
 
