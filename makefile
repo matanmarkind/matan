@@ -2,8 +2,15 @@
 #
 #  -g    adds debugging information to the executable file
 #  -Wall turns on most, but not all, compiler warnings
-CC = clang++
-CFLAGS = -g -Wall -std=c++1z -pthread
+#
+# Example usage
+# matan@matanm:~/cpp/matan$ clang++ -g -std=c++1z -fsanitize=address -fno-omit-frame-pointer junk.cc -o bin/junk 
+# matan@matanm:~/cpp/matan$ ASAN_SYMBOLIZER_PATH=/usr/lib/llvm-3.8/bin/llvm-symbolizer bin/junk 
+#
+SANITIZER?=address
+SANITIZER_FLAGS = -fsanitize=$(SANITIZER) -fsanitize=undefined -fno-omit-frame-pointer
+CC = clang++-4.0
+CFLAGS = -g -Wall -std=c++11 -pthread $(SANITIZER_FLAGS)
 BINDIR = bin
 
 bigmap: timsort.hh BigMap.hh bigmap.cc
@@ -12,8 +19,8 @@ bigmap: timsort.hh BigMap.hh bigmap.cc
 threadpool: ThreadPool.hh threadpool.cc
 				$(CC) $(CFLAGS) threadpool.cc -o $(BINDIR)/threadpool
 
-msgq: BunchQueue.hh message_queue.cc
-				$(CC) $(CFLAGS) message_queue.cc -o $(BINDIR)/msgq
+bunchq: BunchQueue.hh bunch_queue.cc
+				$(CC) $(CFLAGS) bunch_queue.cc -o $(BINDIR)/bunchq
 
 logger: Logger.o logger.cc
 				$(CC) $(CFLAGS) Logger.o logger.cc -o $(BINDIR)/logger
