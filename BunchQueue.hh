@@ -5,89 +5,133 @@
 #include <mutex>
 #include <vector>
 #include <utility>
-#include <type_traits>
 #include <condition_variable>
+#include <type_traits>
+#include <assert.h>
+#include "general.hh"
 
 #include <iostream>  //PUSH_ASSERT
 
-#include "general.hh"
+
 
 namespace matan {
 
+#define BOUNDS_CHECK 1
 template <typename T>
-class BaseQueue {
+class VecQueue {
 public:
   typedef T value_type;
-  BaseQueue(size_t initCapacity) : m_capacity(initCapacity) {}
-  void reset() { m_size=0; }
+  VecQueue(size_t initCapacity=1) : m_capacity(initCapacity), m_size(0) {
+    m_vec = (T*) malloc(sizeof(T)*(m_capacity));
+  }
+  VecQueue(VecQueue& vq) {
+    m_capacity = vq.m_capacity;
+    m_size = 0;
+    m_vec = (T*) malloc(sizeof(T)*(m_capacity));
+    for (size_t i = 0; i < vq.m_size; i++) {
+      if (std::is_trivially_move_constructible<T>::value) {
+        m_size = vq.m_size;
+        memcpy(m_vec, vq.m_vec, m_size);
+      } else {
+        new (m_vec+i) T(vq.m_vec[i]);
+      }
+    }
+  }
+  VecQueue(VecQueue&& vq) {
+    m_capacity = vq.m_capacity;
+    vq.m_capacity = 0;
+    m_size = vq.m_size;
+    vq.m_size = 0;
+    m_vec = vq.m_vec;
+    vq.m_vec = nullptr;
+  }
+  ~VecQueue() { 
+    clearContents();
+  }
+
+  void reset() {
+    if (!std::is_trivially_destructible<T>::value) {
+      for (size_t i = 0; i < m_size; i++) {
+        m_vec[i].~T();
+      }
+    }
+    m_size=0;
+  }
+  void clear() { m_size=0; m_capacity=1; clearContents(); m_vec = malloc(sizeof(T)); }
   size_t size() const { return m_size; }
   T* begin() { return m_vec; }
   const T* begin() const { return m_vec; }
   T* end() { return m_vec+m_size; }
   const T* end() const { return m_vec+m_size; }
-
-protected:
-  T* m_vec = nullptr;
-  size_t m_capacity = 0;
-  size_t m_size = 0;
-};
-
-template <typename T>
-class TakerQueue : public BaseQueue<T> {
-  /*
-   * A vector, but you have to use std::move
-   */
-public:
-  TakerQueue(size_t initCapacity = 1) :  BaseQueue<T>(initCapacity) {
-    this->m_vec = (T*) malloc(sizeof(T)*(this->m_capacity));
+  T& operator[](size_t i) {
+    if (BOUNDS_CHECK) {
+      assert(i < m_size);
+    }
+    return m_vec[i];
   }
-  void push_back(T& t) {
-    if (unlikely(this->m_size >= this->m_capacity)) {
-      this->m_capacity = this->m_capacity << 1;
-      T* oldVec = this->m_vec;
-      this->m_vec = (T*) malloc(sizeof(T)*(this->m_capacity));
-      for (size_t i = 0; i < this->m_size; i++) {
-        new (this->m_vec+i) T(std::move(oldVec[i]));
+
+  void push_back(const T& t) {
+    capacity_check();
+    new (m_vec+m_size) T(t);
+    ++(m_size);
+  }
+  void push_back(T&& t) {
+    capacity_check();
+    new (m_vec+m_size) T(std::move(t));
+    ++(m_size);
+  }
+  template <typename ...Args>
+  void emplace_back(Args... args) {
+    capacity_check();
+    new (m_vec+m_size) T(args...);
+    ++(m_size);
+  }
+
+
+private:
+  void capacity_check() {
+    if (std::is_trivially_move_constructible<T>::value && 
+        unlikely(m_size >= m_capacity)) {
+      m_capacity = m_capacity << 1;
+      m_vec = (T*) realloc(m_vec, sizeof(T)*m_capacity);
+    } else if (unlikely(m_size >= m_capacity)) {
+      m_capacity = m_capacity << 1;
+      T* oldVec = m_vec;
+      m_vec = (T*) malloc(sizeof(T)*(m_capacity));
+      for (size_t i = 0; i < m_size; i++) {
+        if (std::is_move_constructible<T>::value) {
+          new (m_vec+i) T(std::move(oldVec[i]));
+        } else if (std::is_copy_constructible<T>::value) {
+          new (m_vec+i) T(oldVec[i]);
+        }
       }
-      delete[] oldVec;
+      if (std::is_move_constructible<T>::value) {
+        free(oldVec); // Since I move all the elements out I can't delete
+      } else if (std::is_copy_constructible<T>::value) {
+        delete[] oldVec;
+      }
     }
-    new (this->m_vec+this->m_size) T(std::move(t));
-    ++(this->m_size);
   }
+
+  void clearContents() {
+    if (!std::is_trivially_destructible<T>::value) {
+      for (size_t i = 0; i < m_size; i++) {
+        m_vec[i].~T();
+      }
+    }
+    free(m_vec);
+  }
+
+  size_t m_capacity;
+  size_t m_size;
+  T* m_vec;
+  static_assert(std::is_move_constructible<T>::value || std::is_copy_constructible<T>::value,
+                "VecQueue contents must either be move or copy constructible");
 };
+#undef BOUNDS_CHECK
 
 
 template <typename T>
-class ShallowQueue : public BaseQueue<T>{
-  //TODO: figure out the correct concept to use to guarantee T is trivially movable at compile time
-  /*
-   * A queue that instead of freeing and allocating memory constantly
-   * simply reuses the same memory overwriting the appropriate values.
-   *
-   * It's use case is to be filled, then iterated through, and then reset.
-   *
-   * Meant for usage with trivial classes, specifically structs as
-   * messages. The use of memcpy means I am not actually constructing
-   * an object in place, but just taking a shallow copy,
-   * and the use of realloc  in vectors is only be valid for a trivially movable
-   * object.
-   *
-   */
-public:
-  ShallowQueue(size_t initCapacity = 1) : BaseQueue<T>(initCapacity) {
-    this->m_vec = (T*) malloc(sizeof(T)*(this->m_capacity));
-  }
-  void push_back(const T& msg) {
-    if (unlikely(this->m_size >= this->m_capacity)) {
-      this->m_capacity = this->m_capacity << 1;
-      this->m_vec = (T*) realloc(this->m_vec, sizeof(T)*this->m_capacity);
-    }
-    memcpy(this->m_vec+this->m_size, &msg, sizeof(T));
-    ++(this->m_size);
-  }
-};
-
-template <typename Queue>
 class BunchQueue {
   /*
    * Multi writer single reader.
@@ -104,19 +148,18 @@ public:
   BunchQueue(size_t initCapacity = 1) :
     m_queueA(initCapacity), m_queueB(initCapacity) {
   }
-  void push_back(const typename Queue::value_type& msg) {
+  void push_back(const T& t) {
     std::unique_lock<std::mutex> lock(m_mtx);
     auto& q = getQueue();
-    q.push_back(msg);
+    q.push_back(t);
   }
-
-  void push_back(typename Queue::value_type& msg) {
+  void push_back(T&& t) {
     std::unique_lock<std::mutex> lock(m_mtx);
     auto& q = getQueue();
-    q.push_back(msg);
+    q.push_back(t);
   }
 
-  const Queue& takeQueue() {
+  const VecQueue<T>& takeQueue() {
     std::unique_lock<std::mutex> lock(m_mtx);
     auto q = &(getQueue());
     m_whichQueue = !m_whichQueue;
@@ -124,7 +167,7 @@ public:
     return *q;
   }
 
-  bool empty() {
+  bool empty() const {
     try {
       std::unique_lock<std::mutex> lock(m_mtx);
     } catch (const std::system_error& e) {
@@ -137,16 +180,13 @@ public:
 
 private:
   bool m_whichQueue = true;
-  std::mutex m_mtx;
-  Queue m_queueA;
-  Queue m_queueB;
-  Queue& getQueue() {
-    //Only for use in takeQueue, haven't considered general use for thread safety
+  mutable std::mutex m_mtx;
+  VecQueue<T> m_queueA;
+  VecQueue<T> m_queueB;
+  VecQueue<T>& getQueue() {
+    //Must be called from a locked scope
     return m_whichQueue ? m_queueA : m_queueB;
   }
 };
-
-template <typename Msg>
-using MessageQueue = BunchQueue<ShallowQueue<Msg>>;
 
 } //namespace matan
