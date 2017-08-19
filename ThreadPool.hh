@@ -18,7 +18,7 @@ namespace matan {
     ThreadPool(int n = std::thread::hardware_concurrency());
     ~ThreadPool();
     int numThreads() const { return m_workers.size(); };
-    template<class F, class... Args> void enqueue(F &&f, Args&&... args);
+    template <class F> void push_back(F &&func);
     void waitFinished();
 
   private:
@@ -50,11 +50,23 @@ namespace matan {
     }
   }
   
-  template<class F, class... Args>
-  void ThreadPool::enqueue(F&& f, Args&&... args) {
+  template <class F>
+  void ThreadPool::push_back(F &&func) {
+    /*
+     * The variables passed/captured within func are probably
+     * the biggest opportunity for an issue if passed by reference.
+     * If you have a vector<SomeClass> and for each object push
+     * a function with a reference to that object onto the threadpool
+     * and then before waitFinished you push_back a new object onto
+     * the vector you could invalidate all of the references.
+     */
     std::unique_lock<std::mutex> lock(m_queueMutex);
-    auto func = [&f, args...](){ f(args...); };
-    m_tasks.emplace_back(func);
+    /* 
+     * Is there a way for me not to have to wrap this inside of a
+     * lambda? Can I just not care about the return type of
+     * the function?
+     */
+    m_tasks.emplace_back([&func]() { func(); });
     m_cvTask.notify_one();
   }
 

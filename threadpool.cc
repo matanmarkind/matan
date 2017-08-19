@@ -23,12 +23,12 @@ int main() {
 
   std::packaged_task<int()> task([](){ return 7; }); // wrap the function
   std::future<int> f1 = task.get_future();  // get a future
-  tp.enqueue(task);
+  tp.push_back(task);
   std::cout << f1.get() << std::endl;
 
   for (int x = 0; x < 5000; ++x) {
     for (int i = 0; i < 1000; ++i) {
-      tp.enqueue(work_proc, i);
+      tp.push_back([i](){ work_proc(i); });
     }
 
     std::cout << "wait" << std::endl;
