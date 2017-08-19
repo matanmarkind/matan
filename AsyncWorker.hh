@@ -16,6 +16,15 @@ class AsyncWorker {
    * This class is capable of Multi writer, single reader (the internal thread).
    * but the details of implementation will determine the reality of if you
    * can take multiple writers.
+   *
+   * In the child's constructor you must manually call init, since you
+   * cannot create the thread until the the child has been constructed
+   * since it calls to shouldSleep which is a purely virtual function.
+   *
+   * The destructor has been deleted so force you to call to done
+   * manually. Waiting on the thread is done in done as opposed
+   * to ~AsyncWorker in case there are operations the child must wait
+   * to do until the thread has been joined.
    */
 public:
   AsyncWorker() {}
@@ -55,7 +64,6 @@ protected:
    * actual call to wait.
    */
   void done() {
-    std::cout << "done" << std::endl;
     std::unique_lock<std::mutex> lock(m_mtx);
     m_bDone = true;
     notifyWorker();
@@ -75,11 +83,6 @@ protected:
 
 private:
   void waitTillNeeded() {
-    try {
-      shouldSleep();
-    } catch (const std::system_error& e) {
-      std::cout << "error shouldSleep" << std::endl;
-    }
     std::unique_lock<std::mutex> lock(m_mtx);
     if (!m_bDone && shouldSleep()) {
       m_bRealWakeup = false;

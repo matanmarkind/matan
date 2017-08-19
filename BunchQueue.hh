@@ -168,12 +168,6 @@ public:
   }
 
   bool empty() const {
-    try {
-      std::unique_lock<std::mutex> lock(m_mtx);
-    } catch (const std::system_error& e) {
-      std::cout << "error locking BunchQueue mutex: " <<  e.what() << std::endl;
-      throw e;
-    }
     std::unique_lock<std::mutex> lock(m_mtx);
     return m_queueA.size() == 0 && m_queueB.size() == 0;
   }

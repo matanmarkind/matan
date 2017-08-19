@@ -19,14 +19,13 @@ class Logger final : public AsyncWorker {
    */
 public:
   Logger(const std::string& ofname);
-  virtual ~Logger() = default;
+  virtual ~Logger();
   Logger(const Logger&) = delete;
   Logger& operator<<(const std::string& str) {m_buf += str; return *this;}
   Logger& operator<<(const char* c) { m_buf += c; return *this; }
   Logger& operator<<(char c) { m_buf += c; return *this; }
   Logger& operator<<(Logger& (*pf)(Logger&)) {return pf(*this);}
   void flush();
-  void close();
 
 private:
   void doFlush();

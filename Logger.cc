@@ -13,8 +13,7 @@ Logger::Logger(const std::string& ofname) :
   init();
 }
 
-void Logger::close() {
-  std::cout << "close" << std::endl;
+Logger::~Logger() {
   doFlush();
   done();
   m_ofstream.close();
@@ -27,14 +26,12 @@ void Logger::flush() {
 }
 
 void Logger::doFlush() {
-  std::cout << "doFlush" << std::endl;
   m_contents.push_back(m_buf);
   notifyWorker();
   m_buf.clear();
 }
 
 void Logger::doit() {
-  std::cout << "doit" << std::endl;
   for (const auto& line : m_contents.takeQueue()) {
     m_ofstream << line;
     m_ofstream.flush();
