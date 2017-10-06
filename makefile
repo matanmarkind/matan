@@ -10,7 +10,7 @@
 SANITIZER?=address
 SANITIZER_FLAGS = -fsanitize=$(SANITIZER) -fsanitize=undefined -fno-omit-frame-pointer
 CC = clang++-4.0
-CFLAGS = -g -Wall -std=c++11 -pthread $(SANITIZER_FLAGS)
+CFLAGS = -g -Wall -std=c++1z -pthread $(SANITIZER_FLAGS)
 BINDIR = bin
 
 bigmap: timsort.hh BigMap.hh bigmap.cc

@@ -11,6 +11,7 @@
 #include <atomic>
 #include <iostream>
 #include <vector>
+#include <future>
 
 namespace matan {
   class ThreadPool {
@@ -18,7 +19,11 @@ namespace matan {
     ThreadPool(int n = std::thread::hardware_concurrency());
     ~ThreadPool();
     int numThreads() const { return m_workers.size(); };
-    template <class F> void push_back(F &&func);
+    template <typename F, typename ... Args> void push_back(F &&func, Args &&... args);
+    
+    template <typename F, typename ... Args> 
+    std::future<typename std::result_of<F(Args...)>::type> push_back_get_future(F &&func, Args &&... args);
+    
     void waitFinished();
 
   private:
@@ -50,26 +55,39 @@ namespace matan {
     }
   }
   
-  template <class F>
-  void ThreadPool::push_back(F &&func) {
+  template <typename F, typename ... Args>
+  void ThreadPool::push_back(F &&func, Args &&... args) {
     /*
-     * The variables passed/captured within func are probably
-     * the biggest opportunity for an issue if passed by reference.
-     * If you have a vector<SomeClass> and for each object push
-     * a function with a reference to that object onto the threadpool
-     * and then before waitFinished you push_back a new object onto
-     * the vector you could invalidate all of the references.
+     * Args will be captured by value in the lambda. Please be
+     * careful that any pointers passed to args cannot be invalidated
+     * before the function is guaranteed to have run (waitFinished).
      */
     std::unique_lock<std::mutex> lock(m_queueMutex);
-    /* 
-     * Is there a way for me not to have to wrap this inside of a
-     * lambda? Can I just not care about the return type of
-     * the function?
-     */
-    m_tasks.emplace_back([&func]() { func(); });
+    m_tasks.emplace_back([&func, args...]() { func(args...); });
     m_cvTask.notify_one();
   }
 
+  template <typename F, typename ... Args>
+  std::future<typename std::result_of<F(Args...)>::type> ThreadPool::push_back_get_future(F &&func, Args &&... args) {
+    typedef typename std::result_of<F(Args...)>::type RT;
+    /*
+     * Args will be captured by value in the lambda. Please be
+     * careful that any pointers passed to args cannot be invalidated
+     * before the function is guaranteed to have run (waitFinished, or future.get()).
+     */
+    std::promise<RT>* p = new std::promise<RT>();
+    std::future<RT> fut = p->get_future();
+    
+    std::unique_lock<std::mutex> lock(m_queueMutex);
+    m_tasks.emplace_back([p, &func, args...]() {
+      p->set_value(func(args...));
+      delete p; //A promise can be deleted after being set without invalidating its future
+    });
+    m_cvTask.notify_one();
+    
+    return fut;
+  }
+  
   void ThreadPool::waitFinished() {
     std::unique_lock<std::mutex> lock(m_queueMutex);
     m_cvFinished.wait(lock,

@@ -18,23 +18,26 @@ void work_proc(int n) {
   std::sort(data.begin(), data.end());
 }
 
+int small(int i) {
+  return i;
+}
+
 int main() {
   matan::ThreadPool tp;
 
-  std::packaged_task<int()> task([](){ return 7; }); // wrap the function
-  std::future<int> f1 = task.get_future();  // get a future
-  tp.push_back(task);
-  std::cout << f1.get() << std::endl;
-
-  for (int x = 0; x < 5000; ++x) {
+  auto f1 = tp.push_back_get_future(small, 7);
+  
+  for (int x = 0; x < 5; ++x) {
     for (int i = 0; i < 1000; ++i) {
-      tp.push_back([i](){ work_proc(i); });
+      tp.push_back(work_proc, i);
     }
 
     std::cout << "wait" << std::endl;
     tp.waitFinished();
     std::cout << "wait finished" << std::endl;
   }
+  
+  std::cout << f1.get() << std::endl;
 
   return 0;
 }
